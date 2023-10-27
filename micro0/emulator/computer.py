@@ -26,14 +26,51 @@ class Cpu:
             self.tick_counter += 1
         elif self.tick_counter == 2:
             if self.instruction == 0x01:
-                self.acc = self.memory.read(self.pc + 1)
-                self.pc += 2
-                self.tick_counter = 0
+                self.index = self.memory.read(self.pc + 1)
+                self.tick_counter += 1
             elif self.instruction == 0x02:
                 self.index = self.memory.read(self.pc + 1)
                 self.tick_counter += 1
+            elif self.instruction == 0x03:
+                self.index = self.memory.read(self.pc + 1)
+                self.tick_counter += 1
+            elif self.instruction == 0x04:
+                self.index = self.memory.read(self.pc + 1)
+                self.tick_counter += 1
         elif self.tick_counter == 3:
+            if self.instruction == 0x01:
+                self.index += self.memory.read(self.pc + 2) << 8
+                self.tick_counter += 1
             if self.instruction == 0x02:
+                self.index += self.memory.read(self.pc + 2) << 8
+                self.tick_counter += 1
+            elif self.instruction == 0x03:
+                self.index += self.memory.read(self.pc + 2) << 8
+                self.tick_counter += 1
+            elif self.instruction == 0x04:
+                self.index += self.memory.read(self.pc + 2) << 8
+                self.tick_counter += 1
+        elif self.tick_counter == 4:
+            if self.instruction == 0x01:
+                self.acc = self.memory.read(self.index)
+                self.pc += 3
+                self.tick_counter = 0
+            elif self.instruction == 0x02:
                 self.memory.write(self.index, self.acc)
                 self.pc += 3
                 self.tick_counter = 0
+            if self.instruction == 0x03:
+                self.buffer = self.memory.read(self.index)
+                self.tick_counter += 1
+            if self.instruction == 0x04:
+                if self.acc == 0:
+                    self.pc = self.index
+                else:
+                    self.pc += 3
+                self.tick_counter = 0
+        elif self.tick_counter == 5:
+            if self.instruction == 0x03:
+                self.acc = (self.acc + self.buffer) % 0x100
+                self.pc += 3
+                self.tick_counter = 0
+
