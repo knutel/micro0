@@ -97,8 +97,8 @@ class AssemblerParsers(ps.ParserContext, whitespace=r"[ \n]*"):
     literal_byte = ps.lit("db") >> hexadecimal > LiteralByte
     instructions = load_direct | store_direct | add_direct | branch_if_zero_set_direct | literal_byte
     label_definition = label << ps.lit(":") > Label
-    instructions_with_label = label_definition & instructions
-    instruction = instructions_with_label | instructions
+    comment = ps.lit("/*") & ps.reg(r"[a-zA-Z0-9\.,\- \"!\+\(\)]+") & ps.lit("*/")
+    instruction = ps.opt(label_definition) & instructions << ps.opt(comment) > flatten
     section = origin & ps.rep1(instruction) > (lambda x: Section(x[0], flatten(x[1])))
     program = ps.rep1(section)
 

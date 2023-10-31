@@ -25,21 +25,21 @@ class TestSystem(unittest.TestCase):
         source = """
                     .org 0x0
                     load [zero]
-                    store [offset]
-        repeat:     load [offset]
-                    store [0x000D]
-                    load [0x1000]
+                    store [index]   /* Initialize index */
+        repeat:     load [index]
+                    store [0x000D]  /* Store the index lsb at (i + 1) */
+        i:          load [0x1000]   /* Effectively 0x1000 + index. Self modifying code. */
                     brz [finished]
-                    store [0xf000]
-                    load [offset]
-                    add [one]
-                    store [offset]
-                    load [zero]
+                    store [0xf000]  /* Write to character device */
+                    load [index]
+                    add [one]       /* Increment index */
+                    store [index]
+                    load [zero]     /* Unconditional jump */
                     brz [repeat]
-        finished:   brz [finished]
+        finished:   brz [finished]  /* Loop forever */
 
                     .org 0x1000
-        string:     db 0x48
+        string:     db 0x48         /* "Hello World!" */
                     db 0x65
                     db 0x6c
                     db 0x6c
@@ -51,10 +51,10 @@ class TestSystem(unittest.TestCase):
                     db 0x6c
                     db 0x64
                     db 0x21
-                    db 0x00
+                    db 0x00 /* null terminator */
         zero:       db 0x00
         one:        db 0x01
-        offset:     db 0x00
+        index:      db 0x00 /* index into the string */
         """
         binary = Assembler().assemble(source)
         system.load(binary)

@@ -54,7 +54,7 @@ class TestAssembler(unittest.TestCase):
     def test_loop_with_label(self):
         source = """
                 .org 0x0
-        repeat: load [source]
+        repeat: load [source] /* comment */
                 store [dest]
                 brz [repeat]
                 
