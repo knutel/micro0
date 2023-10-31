@@ -1,5 +1,9 @@
+from typing import List
+
+
 class Memory:
-    def __init__(self, contents):
+    def __init__(self, offset, contents):
+        self.offset = offset
         self.contents = contents
 
     def read(self, offset):
@@ -7,6 +11,15 @@ class Memory:
 
     def write(self, offset, value):
         self.contents[offset] = value
+
+
+class CharacterOutput:
+    def __init__(self, offset):
+        self.offset = offset
+        self.buffer = []
+
+    def write(self, offset, value):
+        self.buffer.append(value)
 
 
 class Instruction:
@@ -20,11 +33,11 @@ class LoadDirect(Instruction):
 
     def tick(self, cpu):
         if cpu.tick_counter == 2:
-            cpu.index = cpu.memory.read(cpu.pc + 1)
+            cpu.index = cpu.bus.read(cpu.pc + 1)
         elif cpu.tick_counter == 3:
-            cpu.index += cpu.memory.read(cpu.pc + 2) << 8
+            cpu.index += cpu.bus.read(cpu.pc + 2) << 8
         elif cpu.tick_counter == 4:
-            cpu.acc = cpu.memory.read(cpu.index)
+            cpu.acc = cpu.bus.read(cpu.index)
             cpu.pc += 3
             cpu.tick_counter = 0
 
@@ -35,11 +48,11 @@ class StoreDirect(Instruction):
 
     def tick(self, cpu):
         if cpu.tick_counter == 2:
-            cpu.index = cpu.memory.read(cpu.pc + 1)
+            cpu.index = cpu.bus.read(cpu.pc + 1)
         elif cpu.tick_counter == 3:
-            cpu.index += cpu.memory.read(cpu.pc + 2) << 8
+            cpu.index += cpu.bus.read(cpu.pc + 2) << 8
         elif cpu.tick_counter == 4:
-            cpu.memory.write(cpu.index, cpu.acc)
+            cpu.bus.write(cpu.index, cpu.acc)
             cpu.pc += 3
             cpu.tick_counter = 0
 
@@ -50,11 +63,11 @@ class AddDirect(Instruction):
 
     def tick(self, cpu):
         if cpu.tick_counter == 2:
-            cpu.index = cpu.memory.read(cpu.pc + 1)
+            cpu.index = cpu.bus.read(cpu.pc + 1)
         elif cpu.tick_counter == 3:
-            cpu.index += cpu.memory.read(cpu.pc + 2) << 8
+            cpu.index += cpu.bus.read(cpu.pc + 2) << 8
         elif cpu.tick_counter == 4:
-            cpu.buffer = cpu.memory.read(cpu.index)
+            cpu.buffer = cpu.bus.read(cpu.index)
         elif cpu.tick_counter == 5:
             cpu.acc = (cpu.acc + cpu.buffer) % 0x100
             cpu.pc += 3
@@ -67,9 +80,9 @@ class BranchIfZeroSet(Instruction):
 
     def tick(self, cpu):
         if cpu.tick_counter == 2:
-            cpu.index = cpu.memory.read(cpu.pc + 1)
+            cpu.index = cpu.bus.read(cpu.pc + 1)
         elif cpu.tick_counter == 3:
-            cpu.index += cpu.memory.read(cpu.pc + 2) << 8
+            cpu.index += cpu.bus.read(cpu.pc + 2) << 8
         elif cpu.tick_counter == 4:
             if cpu.acc == 0:
                 cpu.pc = cpu.index
@@ -78,15 +91,32 @@ class BranchIfZeroSet(Instruction):
             cpu.tick_counter = 0
 
 
+class Bus:
+    def __init__(self, devices):
+        self.devices = devices[:]
+        self.devices.sort(key=lambda device: -device.offset)
+
+    def read(self, offset):
+        for device in self.devices:
+            if offset >= device.offset:
+                return device.read(offset)
+
+    def write(self, offset, value):
+        for device in self.devices:
+            if offset >= device.offset:
+                device.write(offset, value)
+                return
+
+
 class Cpu:
-    def __init__(self, memory: Memory):
+    def __init__(self, bus: Bus):
         instructions = [LoadDirect(), StoreDirect(), AddDirect(), BranchIfZeroSet()]
         self.instructions = {instruction.opcode: instruction for instruction in instructions}
         assert len(instructions) == len(self.instructions)
         self.pc = 0
         self.acc = 0
         self.index = 0
-        self.memory = memory
+        self.bus = bus
         self.tick_counter = 0
         self.instruction = None
 
@@ -94,7 +124,7 @@ class Cpu:
         if self.tick_counter == 0:
             self.tick_counter += 1
         elif self.tick_counter == 1:
-            opcode = self.memory.read(self.pc)
+            opcode = self.bus.read(self.pc)
             self.instruction = self.instructions[opcode]
             self.tick_counter += 1
         else:
