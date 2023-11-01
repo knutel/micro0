@@ -80,5 +80,6 @@ class TestAssembler(unittest.TestCase):
         prog = assembler.assemble(source)
         self.assertEqual([0x01, 0x09, 0x00, 0x03, 0x0a, 0x00, 0x04, 0x00, 0x00, 0x32, 0x00], prog)
 
+
 if __name__ == '__main__':
     unittest.main()

@@ -120,7 +120,11 @@ class Cpu:
         self.tick_counter = 0
         self.instruction = None
 
-    def tick(self):
+    def tick(self, ticks=1):
+        for _ in range(ticks):
+            self._tick()
+
+    def _tick(self):
         if self.tick_counter == 0:
             self.tick_counter += 1
         elif self.tick_counter == 1:
@@ -131,3 +135,18 @@ class Cpu:
             self.instruction.tick(self)
             if self.tick_counter > 0:
                 self.tick_counter += 1
+
+
+class System:
+    def __init__(self):
+        self.memory = Memory(0x0000, [])
+        self.char_out = CharacterOutput(0xf000)
+        self.bus = Bus([self.memory, self.char_out])
+        self.cpu = Cpu(self.bus)
+
+    def load(self, binary):
+        self.memory.contents = binary
+
+    def run(self, cycles):
+        for _ in range(cycles):
+            self.cpu.tick()

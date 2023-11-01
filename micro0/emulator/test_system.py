@@ -1,22 +1,7 @@
 import unittest
 
 from micro0.assembler.assembler import Assembler
-from micro0.emulator.computer import Memory, Cpu, CharacterOutput, Bus
-
-
-class System:
-    def __init__(self):
-        self.memory = Memory(0x0000, [])
-        self.char_out = CharacterOutput(0xf000)
-        self.bus = Bus([self.memory, self.char_out])
-        self.cpu = Cpu(self.bus)
-
-    def load(self, binary):
-        self.memory.contents = binary
-
-    def run(self, cycles):
-        for _ in range(cycles):
-            self.cpu.tick()
+from micro0.emulator.computer import System
 
 
 class TestSystem(unittest.TestCase):
