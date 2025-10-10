@@ -1,6 +1,6 @@
 import unittest
 
-from myhdl import block, Signal, intbv, always, TristateSignal, delay, instance, StopSimulation
+from myhdl import block, Signal, intbv, always, TristateSignal, delay, instance, StopSimulation, ResetSignal
 
 from micro0.simulator.components import Register, Memory, ProgramCounter
 
@@ -9,17 +9,19 @@ class TestRegister(unittest.TestCase):
     def test_register_input(self):
         @block
         def testbench():
-            ie = Signal(bool(0))
-            oe = Signal(bool(0))
+            we = Signal(bool(0))
 
-            data_bus = TristateSignal(intbv(0)[8:])
-            data_bus_stim = data_bus.driver()
+            data_bus_in = TristateSignal(intbv(0)[8:])
+            data_bus_in_stim = data_bus_in.driver()
+            data_bus_out = TristateSignal(intbv(0)[8:])
             clk = Signal(bool(0))
+            reset = ResetSignal(0, active=0, isasync=True)
 
             HALF_PERIOD = delay(10)
+            ACTIVE_LOW, INACTIVE_HIGH = 0, 1
 
             reg = Register()
-            reg_a = reg.block(ie, oe, data_bus, data_bus.driver(), clk)
+            reg_a = reg.block(we, data_bus_in, data_bus_out.driver(), clk, reset)
 
             @always(HALF_PERIOD)
             def clkgen():
@@ -27,57 +29,18 @@ class TestRegister(unittest.TestCase):
 
             @instance
             def stimulus():
-                yield delay(0)
-                data_bus_stim.next = 123
-                yield clk.posedge
+                reset.next = ACTIVE_LOW
+                data_bus_in_stim.next = 0x10
                 yield clk.negedge
-                ie.next = 1
+                reset.next = INACTIVE_HIGH
                 yield clk.posedge
-                yield clk.negedge
-                ie.next = 0
+                we.next = 1
                 yield clk.posedge
+                data_bus_in_stim.next = 0x0C
+                we.next = 0
                 yield clk.posedge
-                self.assertEqual(reg.data.val, 123)
-                raise StopSimulation
-
-            return clkgen, stimulus, reg_a
-
-        tb = testbench()
-        tb.config_sim(trace=True)
-        tb.run_sim()
-
-    def test_register_output(self):
-        @block
-        def testbench():
-            ie = Signal(bool(0))
-            oe = Signal(bool(0))
-
-            data_bus = TristateSignal(intbv(0)[8:])
-            data_bus_stim = data_bus.driver()
-            clk = Signal(bool(0))
-
-            HALF_PERIOD = delay(10)
-
-            reg = Register()
-            reg_a = reg.block(ie, oe, data_bus, data_bus.driver(), clk)
-
-            @always(HALF_PERIOD)
-            def clkgen():
-                clk.next = not clk
-
-            @instance
-            def stimulus():
-                yield delay(0)
-                reg.data.next = 42
+                self.assertEqual(reg.data.val, 0x10)
                 yield clk.posedge
-                yield clk.negedge
-                oe.next = 1
-                yield clk.posedge
-                self.assertEqual(data_bus.val, 42)
-                yield clk.negedge
-                oe.next = 0
-                yield clk.posedge
-                self.assertIsNone(data_bus.val)
                 raise StopSimulation
 
             return clkgen, stimulus, reg_a
@@ -93,7 +56,6 @@ class TestMemory(unittest.TestCase):
         def testbench():
             ie = Signal(bool(0))
             oe = Signal(bool(0))
-            ale = Signal(bool(0))
 
             data_bus = TristateSignal(intbv(0)[8:])
             data_bus_stim = data_bus.driver()
@@ -103,7 +65,7 @@ class TestMemory(unittest.TestCase):
             HALF_PERIOD = delay(10)
 
             mem = Memory([43, 100, 39])
-            mem_a = mem.block(ale, ie, oe, address_bus, data_bus, data_bus.driver(), clk)
+            mem_a = mem.block(ie, oe, address_bus, data_bus, clk)
 
             @always(HALF_PERIOD)
             def clkgen():
@@ -111,17 +73,24 @@ class TestMemory(unittest.TestCase):
 
             @instance
             def stimulus():
-                yield clk.negedge
-                ale.next = 1
                 address_bus.next = 1
-                yield clk.negedge
-                ale.next = 0
                 ie.next = 1
                 data_bus_stim.next = 42
-                yield clk.negedge
-                ie.next = 0
+
                 yield clk.posedge
+                yield clk.posedge
+                ie.next = 0
+                oe.next = 1
+                
+                data_bus_stim.next = None
+                yield clk.negedge
+                yield clk.posedge
+                yield delay(1)
+                self.assertEqual(data_bus.val, 42)
                 self.assertEqual(mem.contents[1], 42)
+
+                yield clk.posedge
+
                 raise StopSimulation
 
             return clkgen, stimulus, mem_a
@@ -135,7 +104,6 @@ class TestMemory(unittest.TestCase):
         def testbench():
             ie = Signal(bool(0))
             oe = Signal(bool(0))
-            ale = Signal(bool(0))
 
             data_bus = TristateSignal(intbv(0)[8:])
             data_bus_stim = data_bus.driver()
@@ -145,7 +113,7 @@ class TestMemory(unittest.TestCase):
             HALF_PERIOD = delay(10)
 
             mem = Memory([43, 100, 39])
-            mem_a = mem.block(ale, ie, oe, address_bus, data_bus, data_bus.driver(), clk)
+            mem_a = mem.block(ie, oe, address_bus, data_bus, clk)
 
             @always(HALF_PERIOD)
             def clkgen():
@@ -153,18 +121,28 @@ class TestMemory(unittest.TestCase):
 
             @instance
             def stimulus():
-                yield clk.negedge
-                ale.next = 1
+                yield clk.posedge
                 address_bus.next = 2
-                yield clk.negedge
-                ale.next = 0
                 oe.next = 1
                 yield clk.posedge
-                self.assertEqual(data_bus.val, 39)
-                yield clk.negedge
                 oe.next = 0
+                yield delay(1)
+                self.assertEqual(data_bus.val, 39)
                 yield clk.posedge
-                self.assertIsNone(data_bus.val)
+                data_bus_stim.next = 23
+                ie.next = 1
+                address_bus.next = 1
+                yield clk.posedge
+                self.assertEqual(mem.contents[1], 23)
+                ie.next = 0
+                oe.next = 1
+                data_bus_stim.next = None
+                address_bus.next = 0
+
+                yield clk.posedge
+                yield delay(1)
+                self.assertEqual(data_bus.val, 43)
+                yield clk.posedge
                 raise StopSimulation
 
             return clkgen, stimulus, mem_a
@@ -178,12 +156,10 @@ class TestProgramCounter(unittest.TestCase):
     def test_increment_from_zero(self):
         @block
         def testbench():
-            iel = Signal(bool(0))
-            ieh = Signal(bool(0))
-            lel = Signal(bool(0))
-            leh = Signal(bool(0))
-            ce = Signal(bool(0))
+            wel = Signal(bool(0))
+            weh = Signal(bool(0))
             oe = Signal(bool(0))
+            ce = Signal(bool(0))
 
             data_bus = TristateSignal(intbv(0)[8:])
             data_bus_stim = data_bus.driver()
@@ -195,7 +171,7 @@ class TestProgramCounter(unittest.TestCase):
 
 
             pc = ProgramCounter()
-            pc_inst = pc.block(iel, ieh, lel, leh, oe, ce, data_bus, address_bus.driver(), clk)
+            pc_inst = pc.block(wel, weh, oe, ce, data_bus, address_bus.driver(), clk)
 
             @always(HALF_PERIOD)
             def clkgen():
@@ -203,19 +179,29 @@ class TestProgramCounter(unittest.TestCase):
 
             @instance
             def stimulus():
-                yield clk.negedge
-                oe.next = 1
-                self.assertIsNone(data_bus.val)
                 yield clk.posedge
-                self.assertEqual(0, address_bus.val)
-                yield clk.negedge
-                oe.next = 0
+                oe.next = 1
                 ce.next = 1
-                yield clk.negedge
-                oe.next = 1
-                ce.next = 0
+                self.assertIsNone(data_bus.val)
+
                 yield clk.posedge
+                ce.next = 0
+
+                yield delay(1)
+                self.assertEqual(0, address_bus.val)
+                
+                yield clk.posedge
+                oe.next = 0
+
+                yield delay(1)
                 self.assertEqual(1, address_bus.val)
+                
+                yield clk.posedge
+
+                yield delay(1)
+                self.assertIsNone(address_bus.val)
+
+                yield clk.posedge
 
                 raise StopSimulation
 
@@ -228,10 +214,8 @@ class TestProgramCounter(unittest.TestCase):
     def test_wrap_pcl(self):
         @block
         def testbench():
-            iel = Signal(bool(0))
-            ieh = Signal(bool(0))
-            lel = Signal(bool(0))
-            leh = Signal(bool(0))
+            wel = Signal(bool(0))
+            weh = Signal(bool(0))
             ce = Signal(bool(0))
             oe = Signal(bool(0))
 
@@ -245,7 +229,7 @@ class TestProgramCounter(unittest.TestCase):
 
 
             pc = ProgramCounter(255)
-            pc_inst = pc.block(iel, ieh, lel, leh, oe, ce, data_bus, address_bus.driver(), clk)
+            pc_inst = pc.block(wel, weh, oe, ce, data_bus, address_bus.driver(), clk)
 
             @always(HALF_PERIOD)
             def clkgen():
@@ -253,13 +237,12 @@ class TestProgramCounter(unittest.TestCase):
 
             @instance
             def stimulus():
-                yield clk.negedge
-                oe.next = 0
-                ce.next = 1
-                yield clk.negedge
                 oe.next = 1
-                ce.next = 0
+                ce.next = 1
                 yield clk.posedge
+                yield clk.posedge
+                yield clk.posedge
+                delay(1)
                 self.assertEqual(0x0100, address_bus.val)
                 yield clk.negedge
                 oe.next = 0
@@ -276,10 +259,8 @@ class TestProgramCounter(unittest.TestCase):
     def test_input(self):
         @block
         def testbench():
-            iel = Signal(bool(0))
-            ieh = Signal(bool(0))
-            lel = Signal(bool(0))
-            leh = Signal(bool(0))
+            wel = Signal(bool(0))
+            weh = Signal(bool(0))
             ce = Signal(bool(0))
             oe = Signal(bool(0))
 
@@ -293,7 +274,7 @@ class TestProgramCounter(unittest.TestCase):
 
 
             pc = ProgramCounter()
-            pc_inst = pc.block(iel, ieh, lel, leh, oe, ce, data_bus, address_bus.driver(), clk)
+            pc_inst = pc.block(wel, weh, oe, ce, data_bus, address_bus.driver(), clk)
 
             @always(HALF_PERIOD)
             def clkgen():
@@ -301,26 +282,26 @@ class TestProgramCounter(unittest.TestCase):
 
             @instance
             def stimulus():
-                yield clk.negedge
-                iel.next = 1
+                wel.next = 1
                 data_bus_stim.next = 0x12
-                yield clk.negedge
-                iel.next = 0
-                ieh.next = 1
+
+                yield clk.posedge
+                weh.next = 1
+                wel.next = 0
                 data_bus_stim.next = 0x34
-                yield clk.negedge
-                ieh.next = 0
+
+                yield clk.posedge
+                weh.next = 0
                 data_bus_stim.next = None
-                lel.next = 1
-                leh.next = 1
-                yield clk.negedge
-                lel.next = 0
-                leh.next = 0
                 oe.next = 1
-                yield clk.negedge
-                self.assertEqual(0x3412, address_bus.val)
+
+                yield clk.posedge
                 oe.next = 0
-                yield clk.negedge
+
+                yield delay(1)
+                self.assertEqual(0x3412, address_bus.val)
+
+                yield clk.posedge
                 self.assertIsNone(data_bus.val)
 
                 raise StopSimulation
